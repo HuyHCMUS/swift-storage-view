@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from './ui/button';
@@ -37,18 +36,35 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
 
   const handleDelete = async (fileName: string) => {
     try {
+      // Xoá file từ Supabase storage
       const { error } = await supabase.storage.from('documents').remove([fileName]);
       if (error) throw error;
       
+      // Gọi API để xoá file từ backend
+      const formData = new FormData();
+      formData.append('file_id', fileName);
+      
+      const apiResponse = await fetch('https://maibot-backend-knowledge.onrender.com/remove_file_pageindex', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!apiResponse.ok) {
+        console.error(`API error: ${apiResponse.status}`);
+      }
+      console.log(apiResponse);
+      
       toast({
+        
         title: "Success",
         description: "File deleted successfully",
       });
       onDelete();
     } catch (error) {
+      console.error(error);
       toast({
         title: "Error",
-        description: "Failed to delete file",
+        description: error?.message || "Failed to delete file",
         variant: "destructive",
       });
     }

@@ -14,15 +14,36 @@ export const FileUpload = ({ onUploadComplete }: { onUploadComplete: () => void 
 
     setIsUploading(true);
     try {
-      const { error } = await supabase.storage
+      // Upload to Supabase storage
+      const { data, error } = await supabase.storage
         .from('documents')
         .upload(`${Date.now()}-${file.name}`, file);
 
       if (error) throw error;
       
+      // Get file ID from Supabase response
+      const fileId = data?.path || `${Date.now()}-${file.name}`;
+      
+      // Send to external API
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('file_id', fileId);
+      formData.append('bot_id', 'a856a37f-f64e-4651-880e-3a68c969d527');
+      formData.append('file_type', 'document');
+      
+      const apiResponse = await fetch('https://maibot-backend-knowledge.onrender.com/upload_file_pageindex', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!apiResponse.ok) {
+        throw new Error(`API request failed with status: ${apiResponse.status}`);
+        
+      }
+      console.log(apiResponse);
       toast({
         title: "Success",
-        description: "File uploaded successfully",
+        description: "File uploaded and processed successfully",
       });
       onUploadComplete();
     } catch (error) {
