@@ -1,5 +1,4 @@
-
-import { ChangeEvent, useState } from 'react';
+import { ChangeEvent, useState, useRef } from 'react';
 import { Button } from './ui/button';
 import { Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,6 +6,7 @@ import { toast } from './ui/use-toast';
 
 export const FileUpload = ({ onUploadComplete }: { onUploadComplete: () => void }) => {
   const [isUploading, setIsUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -26,9 +26,10 @@ export const FileUpload = ({ onUploadComplete }: { onUploadComplete: () => void 
       });
       onUploadComplete();
     } catch (error) {
+      console.error(error);
       toast({
         title: "Error",
-        description: "Failed to upload file",
+        description: error?.message || "Failed to upload file",
         variant: "destructive",
       });
     } finally {
@@ -40,6 +41,7 @@ export const FileUpload = ({ onUploadComplete }: { onUploadComplete: () => void 
     <div className="flex items-center justify-center w-full p-4">
       <label className="relative">
         <input
+          ref={inputRef}
           type="file"
           className="hidden"
           onChange={handleFileUpload}
@@ -48,6 +50,7 @@ export const FileUpload = ({ onUploadComplete }: { onUploadComplete: () => void 
         <Button 
           className="w-full"
           disabled={isUploading}
+          onClick={() => inputRef.current?.click()}
         >
           <Upload className="mr-2" />
           {isUploading ? 'Uploading...' : 'Upload File'}
