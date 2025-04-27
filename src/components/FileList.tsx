@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { Trash2, FileText } from 'lucide-react';
+import { Trash2, FileText, Download } from 'lucide-react';
 import { toast } from './ui/use-toast';
 
 interface FileStatus {
@@ -79,6 +78,38 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
     }
   };
 
+  const handleDownload = async (fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(fileName);
+
+      if (error) throw error;
+
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "File downloaded successfully",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Failed to download file",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDelete = async (fileName: string) => {
     try {
       const { error } = await supabase.storage.from('documents').remove([fileName]);
@@ -143,7 +174,10 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
         files.map((file) => (
           <Card key={file.id} className="hover:shadow-md transition-shadow">
             <CardContent className="flex items-center justify-between p-4">
-              <div className="flex items-center space-x-4 flex-1">
+              <div 
+                className="flex items-center space-x-4 flex-1 cursor-pointer"
+                onClick={() => handleDownload(file.name)}
+              >
                 <FileText className="text-gray-500" />
                 <div className="flex flex-col">
                   <span className="font-medium">{file.name}</span>
@@ -152,13 +186,22 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
                   </span>
                 </div>
               </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDelete(file.name)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownload(file.name)}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDelete(file.name)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))
