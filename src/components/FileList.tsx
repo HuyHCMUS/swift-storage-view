@@ -1,9 +1,16 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Trash2, FileText } from 'lucide-react';
 import { toast } from './ui/use-toast';
+
+interface FileStatus {
+  file_id: string;
+  file_name: string;
+  status: 'processing' | 'completed' | 'error';
+}
 
 interface FileObject {
   name: string;
@@ -12,17 +19,55 @@ interface FileObject {
 
 export const FileList = ({ onDelete }: { onDelete: () => void }) => {
   const [files, setFiles] = useState<FileObject[]>([]);
+  const [fileStatuses, setFileStatuses] = useState<Record<string, FileStatus>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchFiles();
+    subscribeToFileStatus();
   }, []);
+
+  const subscribeToFileStatus = () => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'file_status'
+        },
+        () => {
+          fetchFileStatuses();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+  const fetchFileStatuses = async () => {
+    const { data } = await supabase
+      .from('file_status')
+      .select('*');
+    
+    if (data) {
+      const statusMap = data.reduce((acc, status) => ({
+        ...acc,
+        [status.file_id]: status
+      }), {});
+      setFileStatuses(statusMap);
+    }
+  };
 
   const fetchFiles = async () => {
     try {
-      const { data, error } = await supabase.storage.from('documents').list();
+      const { data: files, error } = await supabase.storage.from('documents').list();
       if (error) throw error;
-      setFiles(data || []);
+      setFiles(files || []);
+      await fetchFileStatuses();
     } catch (error) {
       toast({
         title: "Error",
@@ -36,11 +81,16 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
 
   const handleDelete = async (fileName: string) => {
     try {
-      // Xoá file từ Supabase storage
       const { error } = await supabase.storage.from('documents').remove([fileName]);
       if (error) throw error;
       
-      // Gọi API để xoá file từ backend
+      // Delete status record
+      await supabase
+        .from('file_status')
+        .delete()
+        .eq('file_id', fileName);
+      
+      // Call API to remove from backend
       const formData = new FormData();
       formData.append('file_id', fileName);
       
@@ -52,10 +102,8 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
       if (!apiResponse.ok) {
         console.error(`API error: ${apiResponse.status}`);
       }
-      console.log(apiResponse);
       
       toast({
-        
         title: "Success",
         description: "File deleted successfully",
       });
@@ -67,6 +115,19 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
         description: error?.message || "Failed to delete file",
         variant: "destructive",
       });
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'processing':
+        return 'text-blue-500';
+      case 'completed':
+        return 'text-green-500';
+      case 'error':
+        return 'text-red-500';
+      default:
+        return 'text-gray-500';
     }
   };
 
@@ -82,9 +143,14 @@ export const FileList = ({ onDelete }: { onDelete: () => void }) => {
         files.map((file) => (
           <Card key={file.id} className="hover:shadow-md transition-shadow">
             <CardContent className="flex items-center justify-between p-4">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-4 flex-1">
                 <FileText className="text-gray-500" />
-                <span className="font-medium">{file.name}</span>
+                <div className="flex flex-col">
+                  <span className="font-medium">{file.name}</span>
+                  <span className={`text-sm ${getStatusColor(fileStatuses[file.name]?.status || 'processing')}`}>
+                    {fileStatuses[file.name]?.status || 'processing'}
+                  </span>
+                </div>
               </div>
               <Button
                 variant="destructive"
